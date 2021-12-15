@@ -54,10 +54,10 @@ data=data0[start:end]
 data_price=data.groupby('time')['price'].last()
 #print(data_price)
 
-time_space='1000ms'
-time_jump='10ms'
+time_space='50ms'
+
 jump_num=10
-window_size=460
+window_size=450
 pre_num=100
 
 gm_pre=[]
@@ -83,33 +83,36 @@ for j in range(len(retn_price_jump) - 1):  # 100
     #print((retn_price_fill ** 2)[j:j + jump_num + 1])
 vol_retn_fill = np.sqrt(vol2_retn_fill)
 
-
+pre_u_d_s=[]
 for i in range(pre_num):
 
     retn_fit=retn_price_jump[i:window_size+i] # 1s的滑动
     print(retn_fit)
-    basic_gm = arch_model( retn_fit, p=1, q=1,o = 1,
-                         mean='zero', vol='EGARCH', dist='t')
+    basic_gm = arch_model( retn_fit, p=1, q=1,o = 0,
+                         mean='zero', vol='GARCH', dist='t')
     gm_result = basic_gm.fit(update_freq = 0)
     gm_vol2 = gm_result.conditional_volatility
     gm_vol =  np.sqrt(gm_vol2)
     gm_for2 = gm_result.forecast()
     gm_forecast2 = gm_for2.variance[-1:]
-    gm_pre_2=np.append( gm_pre_2, gm_forecast2['h.1'])
+
+    pre_u_d = gm_forecast2['h.1'][0] - vol2_retn_fill[:window_size + i][-1]
+    pre_u_d_s=np.append( pre_u_d_s,pre_u_d)
+
+    gm_pre_2 = np.append(gm_pre_2, gm_forecast2['h.1'][0])
     #gm_pre=np.append(gm_pre,np.sqrt(gm_forecast2['h.1']))
 
-   # # 调整预测值
-   #  if gm_pre[-1] > np.max(gm_vol):
-   #      gm_pre[-1]  = np.max(gm_vol)
-   #  if gm_pre[-1] .item()< np.min(gm_vol):
-   #      gm_pre[-1]  = np.min(gm_vol)
-   #  if gm_pre[-1] .item()> gm_vol[-1] * 2:
-   #      gm_pre[-1]  = gm_vol[-1] * 2
-    #vol_gm_pre = np.append( vol_gm_pre , gm_pre[-1])
+
+
 
 vol_retn_fill_pre=vol_retn_fill[window_size:window_size+pre_num]
-gm_pre=np.sqrt(gm_pre_2)
+gm_pre=np.sqrt(gm_pre_2 )
 
+vol_retn_fill_pre_1=vol_retn_fill[window_size-1:window_size+pre_num]
+real_u_d_s=[]
+for i in range(len(vol_retn_fill_pre_1)-1):
+    real_u_n=vol_retn_fill_pre_1[i+1]-vol_retn_fill_pre_1[i]
+    real_u_d_s=np.append(real_u_d_s,real_u_n)
 
 def evaluate(observation, forecast):
     # Call sklearn function to calculate MAE
@@ -119,11 +122,27 @@ def evaluate(observation, forecast):
     mse = mean_squared_error(observation, forecast)
     print(f'Mean Squared Error (MSE): {round(mse,3)}')
     return mae, mse
+same=[]
+for i in range(pre_num):
+
+
+    if real_u_d_s[i]!=0 and  pre_u_d_s[i]!=0:
+        if real_u_d_s[i] * pre_u_d_s[i] > 0:
+            a=1
+        else:
+            a=0
+    elif real_u_d_s[i]==0 and pre_u_d_s[i]==0:
+        a=1
+    else:
+        a=0
+
+    same=np.append(same,a)
 
 print('vol_gm_pre',  gm_pre)
 print('vol_retn_fill_pre',vol_retn_fill_pre)
 
 evaluate(vol_retn_fill_pre, gm_pre)
+print('u_d_same',same.sum())
 
 x=range(pre_num)
 plt.plot(x,gm_pre,label='con_vol')
